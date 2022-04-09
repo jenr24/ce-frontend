@@ -1,6 +1,10 @@
 {
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
+    flake-compat = {
+      url = github:edolstra/flake-compat;
+      flake = false;
+    };
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     rust-overlay.inputs.flake-utils.follows = "flake-utils";
@@ -8,7 +12,7 @@
     naersk.url = "github:nix-community/naersk";
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, naersk }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, naersk, flake-compat }:
     flake-utils.lib.eachDefaultSystem (system:
       let
 
@@ -34,7 +38,6 @@
           cargoBuildOptions = options: options ++ [
             "--target=wasm32-unknown-unknown"
           ];
-          nativeBuildInputs = with pkgs; [wasm-bindgen-cli];
         };
 
       in rec {
@@ -47,7 +50,7 @@
         devShell =
           pkgs.mkShell {
             buildInputs = with pkgs; [
-              rust-build trunk wasm-bindgen-cli
+              rust-build trunk wasm-bindgen-cli rls rust-analyzer zlib
             ];
           };
       });
