@@ -1,41 +1,54 @@
 {
   inputs = {
-    cargo2nix.url = "github:cargo2nix/cargo2nix";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     rust-overlay.inputs.flake-utils.follows = "flake-utils";
     nixpkgs.url = "github:nixos/nixpkgs?ref=release-21.11";
+    naersk.url = "github:nix-community/naersk";
   };
 
-  outputs = { self, nixpkgs, cargo2nix, flake-utils, rust-overlay, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, naersk }:
     flake-utils.lib.eachDefaultSystem (system:
       let
+
         pkgs = import nixpkgs {
           inherit system;
 
-          crossSystem = {
-            config = "wasm-unknown-unknown";
-            useLLVM = false;
-          };
-
-          overlays = [
-            (import "${cargo2nix}".overlay)
-            rust-overlay.overlay
-          ];
+          overlays = [ rust-overlay.overlay ];
         };
 
-        rustPkgs = pkgs.rustBuilder.makePackageSet' {
-          rustChannel = "1.56.1";
-          packageFun = import ./Cargo.nix;
+        rust-build = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
+          extensions = ["rust-src"];
+          targets = [ "wasm32-unknown-unknown" ];
+        });
+
+        naersk-lib = naersk.lib."${system}".override {
+          rustc = rust-build;
+          cargo = rust-build;
+        };
+
+        ce-frontend = naersk-lib.buildPackage {
+          pname = "ce-frontend";
+          root = ./.;
+          cargoBuildOptions = options: options ++ [
+            "--target=wasm32-unknown-unknown"
+          ];
+          nativeBuildInputs = with pkgs; [wasm-bindgen-cli];
         };
 
       in rec {
-        packages = {
-          ce-frontend = (rustPkgs.workspace.ce-frontend {}).bin;
+        packages = flake-utils.lib.flattenTree {
+          ce-frontend = ce-frontend;
         };
 
         defaultPackage = packages.ce-frontend;
-      }
-    );
+
+        devShell =
+          pkgs.mkShell {
+            buildInputs = with pkgs; [
+              rust-build trunk wasm-bindgen-cli
+            ];
+          };
+      });
 }
